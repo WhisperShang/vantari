@@ -166,21 +166,24 @@ def main():
     pdf_paths = collect_pdf_paths(targets)
 
     # Setup the random generator and output directory
-    rng = random.Random(args.seed)
+    seed = args.seed or random.randint(0, 2**32 - 1)
+    rng = random.Random(seed)
     output_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\nProcessing {len(pdf_paths)} file(s) → output dir: {output_dir}\n")
 
+    # Process each PDF and track results
     processed, skipped = 0, 0
     for path in pdf_paths:
         result = remove_random_pages(path, output_dir, rng, args.num_remove)
+
         if result:
             processed += 1
         else:
             skipped += 1
 
-    print(f"\n{processed} pdfs processed, {skipped} skipped.")
+    print(f"\n{processed} pdfs processed, {skipped} skipped. Seed: {seed}")
 
 if __name__ == "__main__":
     main()
