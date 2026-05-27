@@ -61,7 +61,17 @@ MATCH_SCORE_THRESHOLD = 0.30   # fraction of max possible descriptor matches nee
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-KNN_K                 = 2      # must be 2 — Lowe's ratio test compares closest vs second closest
+KNN_K               = 2      # must be 2 — Lowe's ratio test compares closest vs second closest
+SUPPLEMENT_MARKER   = "✔"   # appended to filename to indicate supplemented files
+DESCRIPTION         =  (
+    "Supplements student exam PDFs with missing pages drawn from a fully-scanned blank (empty) exam.")
+EPILOG              = """\
+USAGE
+    vantari blank.pdf                     # uses blank's directory
+    vantari blank.pdf ./students/         # explicit directory
+    vantari blank.pdf a.pdf b.pdf         # explicit files
+    vantari blank.pdf a.pdf ./students/   # mix and match
+"""
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -204,6 +214,7 @@ def supplement_pdf(
     blank_descriptors: DocumentDescriptors,
     verbose: bool = False,
     dry_run: bool = False,
+    mark: bool = True,
     ) -> int:
 
     """
@@ -240,7 +251,11 @@ def supplement_pdf(
                   f"at positions: {', '.join(str(i) for i in inserted_indices)}")
 
         if dry_run and pages_inserted > 0:
-            print("ℹ Dry run mode enabled — no changes  made.")
+            print("ℹ Dry run mode enabled — no changes made.")
+            if mark:
+                new_path = student_path.with_stem(f"{student_path.stem} {SUPPLEMENT_MARKER}")
+                student_path.rename(new_path)
+
 
         return pages_inserted
 
@@ -283,17 +298,8 @@ def collect_student_paths(
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description=(
-            "Supplements student exam PDFs with missing pages drawn "
-            "from a fully-scanned blank (empty) exam."
-        ),
-        epilog="""
-USAGE
-    vantari blank.pdf                     # uses blank's directory
-    vantari blank.pdf ./students/         # explicit directory
-    vantari blank.pdf a.pdf b.pdf         # explicit files
-    vantari blank.pdf a.pdf ./students/   # mix and match
-    """,
+        description=DESCRIPTION,
+        epilog=EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
@@ -341,6 +347,12 @@ USAGE
         action="store_true",
         help="Print per-page matching details.",
     )
+    parser.add_argument(
+        "--disable-marker",
+        action="store_true",
+        default=False,
+        help="Do not mark supplemented PDFs with a completion marker.",
+    )
     return parser.parse_args()
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -379,13 +391,18 @@ def main():
     # Process each student exam
     with fitz.open(str(blank_path)) as blank_doc:
         blank_descriptors = compute_descriptors(blank_doc)
-
         total_inserted = 0
+
         for student_path in student_paths:
             if not student_path.is_file():
                 print(f"\n⚠  File not found, skipping: {student_path}")
                 continue
-            total_inserted += supplement_pdf(student_path, blank_doc, blank_descriptors, args.verbose, args.dry_run)
+            
+            total_inserted += supplement_pdf(
+                student_path, blank_doc, blank_descriptors, 
+                verbose=args.verbose, 
+                dry_run=args.dry_run,
+                mark=not args.disable_marker)
 
     print(f"\n{'═'*60}")
     print(f"Done.  Total pages inserted across all students: {total_inserted}")

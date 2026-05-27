@@ -27,6 +27,7 @@ vantari blank.pdf a.pdf ./students/   # mix and match
 
 Run `vantari --help` for all options, including:
 
-- `--verbose` / `-v` — print per-page matching details
-- `--dry-run` / `-d` — analyse and report only, without modifying any files
+- `--verbose` / `-v` - print per-page matching details
+- `--dry-run` / `-d` - analyse and report only, without modifying any files
+- `--disable-marker` - dont mark supplemented PDFs with a completion marker
 - `--dpi`, `--features`, `--lowe`, `--thresh` — tune the ORB matching parameters
