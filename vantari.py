@@ -104,8 +104,9 @@ def compute_descriptors(
     return document_descriptors
 
 def match_score(
-    blank_desciptors: PageDescriptors,
+    blank_descriptors: PageDescriptors,
     student_descriptors: PageDescriptors,
+    lowe_ratio: float = LOWE_RATIO,
     ) -> int:
 
     """
@@ -113,20 +114,25 @@ def match_score(
     Query direction is blank → student to treat blank descriptors as the subset to look for.
 
     Args:
-        blank_desciptors:       ORB descriptors for a single blank page
+        blank_descriptors:      ORB descriptors for a single blank page
         student_descriptors:    ORB descriptors for a single student page
+        lowe_ratio:             ratio-test threshold
 
     Returns:
         number of good matches found
     """
+    if blank_descriptors is None or student_descriptors is None:
+        return 0
 
     bf = cv.BFMatcher_create(cv.NORM_HAMMING)
-    raw = bf.knnMatch(blank_desciptors, student_descriptors, k=KNN_K)
-    return sum(1 for m, n in raw if m.distance < LOWE_RATIO * n.distance)
+    raw = bf.knnMatch(blank_descriptors, student_descriptors, k=KNN_K)
+    return sum(1 for m, n in raw if m.distance < lowe_ratio * n.distance)
 
 def build_mapping(
     blank_document_descriptors:      DocumentDescriptors,
     student_document_descriptors:    DocumentDescriptors,
+    match_score_threshold: float = MATCH_SCORE_THRESHOLD,
+    orb_features: int = ORB_FEATURES,
     verbose: bool = False,
     ) -> MappingList:
     
@@ -136,6 +142,8 @@ def build_mapping(
     Args:
         blank_document_descriptors:   ORB descriptors for each blank page
         student_document_descriptors: ORB descriptors for each student page
+        match_score_threshold:        minimum score for a match to be considered valid
+        orb_features:                 number of ORB features to use
         verbose:                      whether to print progress information
 
     Returns:
@@ -152,7 +160,7 @@ def build_mapping(
         best_student_index, best_score = max(enumerate(scores), key=lambda x: x[1])
 
         # Exclude weak matches
-        if best_score < MATCH_SCORE_THRESHOLD * ORB_FEATURES:
+        if best_score < match_score_threshold * orb_features:
             continue
 
         # Update the best match for this student page if it's better than any previous match (handle conflicts)
@@ -161,12 +169,10 @@ def build_mapping(
 
     blank_to_student: MappingList = [None] * len(blank_document_descriptors) # blank_index -> student_index
 
-    for student_index, (blank_index, _) in best_blank_per_student.items():
+    for student_index, (blank_index, score) in best_blank_per_student.items():
         blank_to_student[blank_index] = student_index
-
         if verbose:
-            score = best_blank_per_student[student_index][1]
-            print(f"    Student page {student_index} -> Blank page {blank_index} (score: {score})")
+            print(f"    Blank page {blank_index} -> Student page {student_index} (score: {score})")
 
     return blank_to_student
 
@@ -193,7 +199,7 @@ def insert_missing_pages(
     next_student: MappingList = [None] * len(blank_to_student)
     last_seen = None
     for blank_index, student_index in reversed(list(enumerate(blank_to_student))):
-        last_seen = student_index or last_seen
+        last_seen = student_index if student_index is not None else last_seen
         if student_index is None:
             next_student[blank_index] = last_seen
     
@@ -235,12 +241,15 @@ def supplement_pdf(
         if verbose:
             print(f"↳ {len(blank_doc)} blank pages -> {len(student_doc)} student pages")
 
-        blank_to_student        = build_mapping(blank_descriptors, compute_descriptors(student_doc), verbose)
-        inserted_indices = insert_missing_pages(blank_doc, student_doc, blank_to_student, dry_run)
-        student_doc.save(str(student_path))
+        # Insert missing pages and get their indices for reporting
+        blank_to_student    = build_mapping(blank_descriptors, compute_descriptors(student_doc), verbose)
+        inserted_indices    = insert_missing_pages(blank_doc, student_doc, blank_to_student, dry_run)
 
+        # Initialize missing page tracking for reporting
         missing = sorted(i for i, v in enumerate(blank_to_student) if v is None)
         pages_inserted = len(inserted_indices)
+
+        # Print report of results
         print()
         if pages_inserted == 0:
             print("✔ Already complete")
@@ -250,12 +259,15 @@ def supplement_pdf(
             print(f"✔ {pages_inserted} missing pages inserted (blank pages: {', '.join(str(i) for i in missing)}) "
                   f"at positions: {', '.join(str(i) for i in inserted_indices)}")
 
-        if dry_run and pages_inserted > 0:
-            print("ℹ Dry run mode enabled — no changes made.")
-            if mark:
-                new_path = student_path.with_stem(f"{student_path.stem} {SUPPLEMENT_MARKER}")
-                student_path.rename(new_path)
-
+        # Save the modified student PDF, and optionally mark it with a completion marker in the filename
+        if pages_inserted > 0:
+            if dry_run:
+                print("ℹ Dry run mode enabled — no changes made.")
+            else:
+                student_doc.save(str(student_path))
+                if mark:
+                    new_path = student_path.with_stem(f"{student_path.stem} {SUPPLEMENT_MARKER}")
+                    student_path.rename(new_path)
 
         return pages_inserted
 
