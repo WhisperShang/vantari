@@ -180,4 +180,5 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-pdfs/
+# My additions
+fixtures/

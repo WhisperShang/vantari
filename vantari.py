@@ -309,6 +309,18 @@ def collect_student_paths(
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
+def positive_int(value):
+    v = int(value)
+    if v < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {value}")
+    return v
+
+def unit_float(value):
+    v = float(value)
+    if not (0 < v < 1):
+        raise argparse.ArgumentTypeError(f"must be between 0 and 1, got {value}")
+    return v
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description=DESCRIPTION,
@@ -328,25 +340,25 @@ def parse_args():
     )
     parser.add_argument(
         "--dpi",
-        type=int,
+        type=positive_int,
         default=DPI,
         help=f"Render resolution in DPI (default: {DPI}). Higher = more accurate but slower.",
     )
     parser.add_argument(
         "--features",
-        type=int,
+        type=positive_int,
         default=ORB_FEATURES,
         help=f"Max ORB keypoints per page (default: {ORB_FEATURES}).",
     )
     parser.add_argument(
         "--lowe",
-        type=float,
+        type=unit_float,
         default=LOWE_RATIO,
         help=f"Lowe ratio-test threshold (default: {LOWE_RATIO}).",
     )
     parser.add_argument(
         "--match", "-m",
-        type=float,
+        type=unit_float,
         default=MATCH_SCORE_THRESHOLD,
         help=f"Matching score threshold (default: {MATCH_SCORE_THRESHOLD}).",
     )
@@ -403,9 +415,11 @@ def main():
 
     # Process each student exam
     with fitz.open(str(blank_path)) as blank_doc:
-        blank_descriptors = compute_descriptors(blank_doc)
+        # Compute descriptors for the blank exam once and reuse for all students
+        blank_descriptors = compute_descriptors(blank_doc, args.dpi, args.features)
         total_inserted = 0
 
+        # Supplement each student PDF and count total pages inserted
         for student_path in student_paths:
             if not student_path.is_file():
                 print(f"\n⚠  File not found, skipping: {student_path}")

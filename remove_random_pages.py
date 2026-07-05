@@ -5,8 +5,11 @@ Takes scanned answer-paper PDFs, randomly removes a few pages,
 and encodes the removed page numbers into the output filename. (used for testing)
 
 USAGE
+    python remove_random_pages.py [options] # for all PDFs in the current working directory
     python remove_random_pages.py <input.pdf> [options] # for a single file
     python remove_random_pages.py <input_folder> [options] # for all PDFs in a folder
+    python remove_random_pages.py <input1.pdf> <input_folder> <input2.pdf> [options] # mixing, handles duplicates
+
 
     Run "python remove_random_pages.py --help" for all options, including:
 
@@ -15,7 +18,7 @@ USAGE
     --seed / -s             Random seed for reproducibility (optional)
 
 OUTPUT FILENAME EXAMPLE
-    StudentA_answers.pdf  →  StudentA_answers_MISSING_p3_p7.pdf
+    StudentA_answers.pdf  →  StudentA_answers (missing 1,2 & 5).pdf
 
 DEPENDENCIES
     pip install pymupdf
@@ -41,7 +44,7 @@ def generate_new_name(
     removed_indices: list[int],
     ) -> str:
 
-    *head, tail = [i + 1 for i in removed_indices]  # convert to 1-based page numbers
+    *head, tail = [i + 1 for i in removed_indices]  # convert to page numbers that start at 1 instead of 0
     missing_tag = ", ".join(str(n) for n in head) + (f" & {tail}" if head else str(tail))
         
     return f"{input_path.stem} (missing {missing_tag}){input_path.suffix}"
@@ -165,13 +168,13 @@ def main():
     targets: list[str | Path] = args.input or [Path.cwd()]
     pdf_paths = collect_pdf_paths(targets)
 
-    # Setup the random generator and output directory
+    # Set up the random generator and output directory
     seed = args.seed or random.randint(0, 2**32 - 1)
     rng = random.Random(seed)
     output_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\nProcessing {len(pdf_paths)} file(s) → output dir: {output_dir}\n")
+    print(f"\nProcessing {len(pdf_paths)} file{'' if len(pdf_paths) == 1 else 's'} → output dir: {output_dir}/\n")
 
     # Process each PDF and track results
     processed, skipped = 0, 0
